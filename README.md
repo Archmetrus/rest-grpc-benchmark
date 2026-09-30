@@ -3,6 +3,13 @@
 **10.000 kullanıcı, 20.000 izin; her sürümde koşu başına 5.000 istek.**
 İki yük seviyesi (1 ve 10 eşzamanlı istek), altışar tekrar: toplam 120.000 istek.
 
+## Çalıştırma sınırları
+
+- Bu depo tek başına çalışmaz; `project-rest` ve `project-grpc` kaynakları gerekir.
+- **`project-grpc` özel depodur.** Bu depoya erişimi olmayan kullanıcı benchmark'ı hazırlayıp çalıştıramaz. Kaynakların kurulumu için [Servis kaynaklarını hazırlama](#servis-kaynaklarını-hazırlama) bölümüne bakın.
+- Go ve Python 3 gerekir. `.sh` başlatıcıları Bash, `fish` olarak işaretlenmiş terminal örnekleri fish kullanır.
+- Farklı kaynak klasörleriyle benchmark ve sekiz servis programının derlenmesi doğrulandı. Bu kontrol, tüm işletim sistemlerinde çalışmanın veya ölçüm sonuçlarının doğrulandığı anlamına gelmez.
+
 ## Yalnızca hazırla
 
 Go ve Python 3 gerekir. Tablolar Goose migration ile oluşturulur, ardından seed kayıtları eklenir. Bu komut ölçüm yapmaz:
