@@ -8,14 +8,14 @@
 Go ve Python 3 gerekir. Tablolar Goose migration ile oluşturulur, ardından seed kayıtları eklenir. Bu komut ölçüm yapmaz:
 
 ```fish
-cd /home/ykk/PROJE/benchmark
+cd (git rev-parse --show-toplevel)
 ./hazirla.sh
 ```
 
 ## Benchmark’ı başlat
 
 ```fish
-cd /home/ykk/PROJE/benchmark
+cd (git rev-parse --show-toplevel)
 ./run.sh
 ```
 
@@ -32,3 +32,32 @@ Betik hazırlığı da yapar; servisleri ayrı terminalde açman gerekmez. Termi
 Veri sayısını `workload.go` içindeki `seedUsers`, işlem başına istek sayısını `callsPerOperation` belirler. Okuma/güncelleme/silme hedeflerinin ayrılması için kullanıcı sayısını işlem başına istek sayısının en az üç katı tut.
 
 Ölçüm Gateway ve SQLite dahil uygulamanın tamamını kapsar; yalnızca protokol hızını göstermez.
+
+## Proje dizini
+
+Depoyu istediğiniz klasöre klonlayıp o dizine girin. `git rev-parse --show-toplevel` kullanılan komutlar klonun içinden çalıştırılır; kullanıcı adı veya sabit bir ana dizin gerekmez.
+
+## Servis kaynaklarını hazırlama
+
+Benchmark iki ayrı servis deposunun kaynaklarına ihtiyaç duyar. Varsayılan yerleşim:
+
+```text
+calisma/
+  rest-grpc-benchmark/
+  project-rest/
+  project-grpc/
+```
+
+REST: https://github.com/Archmetrus/project-rest
+
+gRPC: https://github.com/Archmetrus/project-grpc — bu depo özeldir; hesap erişimi gerekir. Erişiminiz yoksa benchmark hazırlanamaz. Depo görünürlüğü bu değişiklikle değiştirilmez.
+
+Farklı konumlar için `PROJECT_REST_DIR` ve `PROJECT_GRPC_DIR` ortam değişkenlerini kullanın (tam yol veya benchmark köküne göre göreli yol, `~` desteklenir). Örnek Bash:
+
+```sh
+export PROJECT_REST_DIR="/kaynaklar/project-rest"
+export PROJECT_GRPC_DIR="/kaynaklar/project-grpc"
+./hazirla.sh
+```
+
+Go modülünün yerel gRPC bağlantısı hazırlık sırasında bu ayara göre geçici bir modül dosyasında çözülür; servis kaynaklarının go.mod dosyaları değiştirilmez.

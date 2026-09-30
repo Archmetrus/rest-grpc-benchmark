@@ -15,9 +15,17 @@ import sqlite3
 import statistics
 import subprocess
 import time
+import tempfile
 
 ROOT = Path(__file__).resolve().parent
-PROJECTS = ROOT.parent
+def project_path(key, default):
+    path = Path(os.environ.get(key, str(ROOT.parent/default))).expanduser()
+    return (ROOT/path).resolve() if not path.is_absolute() else path.resolve()
+
+SERVICE_PROJECTS = {
+    'rest': project_path('PROJECT_REST_DIR', 'project-rest'),
+    'grpc': project_path('PROJECT_GRPC_DIR', 'project-grpc'),
+}
 
 def execute(args, cwd=ROOT, env=None, **kwargs):
     return subprocess.run([str(x) for x in args], cwd=cwd, env=env, check=True, **kwargs)
@@ -30,22 +38,32 @@ def save(path, value):
 
 def source_hashes():
     result = {}
-    for base in [ROOT, PROJECTS/'project-rest', PROJECTS/'project-grpc']:
+    for label, base in [('benchmark', ROOT), *[(f'project-{k}', v) for k, v in SERVICE_PROJECTS.items()]]:
         for p in sorted(base.rglob('*')):
             if not p.is_file() or any(x in p.relative_to(base).parts for x in ('bin','data','seed','seeds','results','__pycache__','.git')):
                 continue
             if p.suffix in ('.go','.sql','.proto','.py','.sh') or p.name in ('go.mod','go.sum'):
-                result[str(p.relative_to(PROJECTS))] = digest(p)
+                result[label+'/'+str(p.relative_to(base))] = digest(p)
     return result
 
 def build():
     (ROOT/'bin').mkdir(exist_ok=True)
-    execute(['go','build','-o',ROOT/'bin/bench','.'])
+    for version, path in SERVICE_PROJECTS.items():
+        if not (path/'go.mod').is_file():
+            raise RuntimeError(f'Missing {version} sources at {path}. Clone project-{version} or set PROJECT_{version.upper()}_DIR. project-grpc requires repository access.')
+    # A private modfile allows arbitrary clone locations without editing sources.
+    with tempfile.TemporaryDirectory(prefix='benchmark-mod-') as directory:
+        modfile = Path(directory)/'go.mod'
+        shutil.copy2(ROOT/'go.mod', modfile)
+        shutil.copy2(ROOT/'go.sum', modfile.with_suffix('.sum'))
+        env = dict(os.environ, GOWORK='off')
+        execute(['go','mod','edit','-modfile',modfile,'-replace',f'example.com/project-grpc={SERVICE_PROJECTS["grpc"]}'],env=env)
+        execute(['go','build','-modfile',modfile,'-o',ROOT/'bin/bench','.'],env=env)
     for version in ('rest','grpc'):
         target=ROOT/'bin'/version
         target.mkdir(exist_ok=True)
         for command in ('gateway','user-service','hr-service','migrate'):
-            execute(['go','build','-o',target/command,'./cmd/'+command],cwd=PROJECTS/f'project-{version}')
+            execute(['go','build','-o',target/command,'./cmd/'+command],cwd=SERVICE_PROJECTS[version])
 
 def database_rows(path, table):
     with sqlite3.connect(f'file:{path}?mode=ro',uri=True) as db:
@@ -58,8 +76,8 @@ def prepare_seed(base_env):
     seed.parent.mkdir(exist_ok=True)
     migration_hashes={}
     for service in ('user','hr'):
-        for p in sorted((PROJECTS/'project-rest/migrations'/service).glob('*.sql')):
-            other=PROJECTS/'project-grpc/migrations'/service/p.name
+        for p in sorted((SERVICE_PROJECTS['rest']/'migrations'/service).glob('*.sql')):
+            other=SERVICE_PROJECTS['grpc']/'migrations'/service/p.name
             if digest(p)!=digest(other):
                 raise RuntimeError('REST/gRPC migrations differ: '+p.name)
             migration_hashes[service+'/'+p.name]=digest(p)
@@ -137,7 +155,7 @@ def run_services(version,env,directory,ports,callback):
     try:
         for command in ('user-service','hr-service','gateway'):
             log=open(directory/(command+'.log'),'w');logs.append(log)
-            processes.append(subprocess.Popen([str(ROOT/'bin'/version/command)],cwd=PROJECTS/f'project-{version}',env=env,stdout=log,stderr=subprocess.STDOUT,start_new_session=True))
+            processes.append(subprocess.Popen([str(ROOT/'bin'/version/command)],cwd=SERVICE_PROJECTS[version],env=env,stdout=log,stderr=subprocess.STDOUT,start_new_session=True))
         deadline=time.monotonic()+15
         while True:
             if any(p.poll() is not None for p in processes):raise RuntimeError('Service exited during startup; see logs')
